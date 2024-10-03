@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stack Game</title>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #1e3c72, #2a5298); /* Fondo con degradado */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            overflow: hidden; 
+        }
+
+        canvas {
+            border-radius: 15px; /* Bordes redondeados */
+            box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.5); /* Sombra alrededor del canvas */
+            background-color: #fff;
+            width: 100%;
+            height: auto;
+            max-height: calc(100vh - 100px); /* Ajuste dinámico para que no se salga */
+        }
+
+        #score-wrapper {
+            background-color: rgba(255, 255, 255, 0.1); /* Fondo semitransparente */
+            padding: 10px 20px;
+            margin-top: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.3);
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            justify-content: center;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.6); /* Sombra de texto */
+        }
+
+        #score {
+            margin-left: 10px;
+            font-size: 30px;
+            color: #ffea00; /* Color llamativo para el marcador */
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 500px;
+            max-height: 100vh; /* Limitar la altura del contenedor */
+            box-sizing: border-box; /* Incluir el padding y borde en el tamaño total */
+        }
+    </style>
+</head>
+<body>
+    <div id="#game-container">
+        <div id="score-wrapper">Puntuación: <span id="score">0</span></div>
+        <canvas id="canvas" width="320" height="500"></canvas>
+    </div>
+
+    <script type="module">
+        const canvas = document.querySelector('canvas');
+        const score = document.querySelector('#score');
+
+        const context = canvas.getContext('2d');
+
+        //CONSTANTES
+        const MODES = {
+            FALL: 'fall',
+            BOUNCE: 'bounce',
+            GAMEOVER: 'gameover'
+        };
+        const INITIAL_BOX_X = 200;
+        const INITIAL_BOX_Y = 600;
+
+        const BOX_HEIGHT = 50;
+        const INITIAL_X_SPEED = 1;
+        const INITIAL_Y_SPEED = 5;
+
+        //ESTADOS
+        let boxes = [];
+        let debris = {x: 0, y:0, width:0, color: 'red'};
+        let scrollCounter, cameraY, current, mode, xSpeed, ySpeed;
+
+        function createStepColor(step){
+            if(step === 0) return 'white';
+
+            const red = Math.floor(Math.random() * 127) + 127;
+            const green = Math.floor(Math.random() * 127) + 127;
+            const blue = Math.floor(Math.random() * 127) + 127;
+
+            return `rgb(${red}, ${green}, ${blue})`;
+        }
+
+        function updateCamera(){
+            if(scrollCounter > 0){
+                cameraY++;
+                scrollCounter--;
+            }
+        }
+
+        function initialGameState(){
+            boxes = [{
+                x: canvas.width / 2 - INITIAL_BOX_X / 2,
+                y: 200,
+                width: INITIAL_BOX_X,
+                color: 'white'
+            }];
+
+            debris = {x: 0, y: 0, width: 0, color:'white'};
+
+            current = 1;
+            mode = MODES.BOUNCE;
+            xSpeed = INITIAL_X_SPEED;
+            ySpeed = INITIAL_Y_SPEED;
+            scrollCounter = 0;
+            cameraY = 0;
+            score.textContent = 0;
+
+            createNewBox();
+        }
+
+        function restart(){
+            initialGameState();
+            draw();
+        }
+
+        function draw(){
+            if (mode === MODES.GAMEOVER) return;
+
+            drawBackground();
+            drawBoxes();
+            drawDebris();
+
+            if(mode === MODES.BOUNCE){
+                moveAndDetectCollision();
+            }else if(mode === MODES.FALL){
+                updateFallMode();
+            }
+
+            debris.y -= ySpeed;
+            updateCamera();
+            window.requestAnimationFrame(draw);
+        }
+
+        function drawBackground(){
+            context.fillStyle = 'rgba(0,0,0,0.5)';
+            context.fillRect(0,0,canvas.width,canvas.height);
+        }
+
+        function drawBoxes(){
+            boxes.forEach((box) => {
+                const {x, y, width, color} = box;
+                const newY = INITIAL_BOX_Y - y + cameraY;
+
+                context.fillStyle = color;
+                context.fillRect(x, newY, width, BOX_HEIGHT);
+            });
+        }
+
+        function drawDebris(){
+            const {x, y, width, color} = debris;
+            const newY = INITIAL_BOX_Y - y + cameraY;
+
+            context.fillStyle = color;
+            context.fillRect(x, newY, width, BOX_HEIGHT);
+        }
+
+        function createNewBox(){
+            boxes[current] = {
+                x: 0,
+                y: (current + 10) * BOX_HEIGHT,
+                width: boxes[current - 1].width,
+                color: createStepColor(current)
+            };
+        }
+
+        function createNewDebris(difference, color){
+            const currentBox = boxes[current];
+            const previousBox = boxes[current - 1];
+
+            const debrisX = currentBox.x > previousBox.x
+                ? currentBox.x + currentBox.width
+                : currentBox.x;
+            debris = {
+                x: debrisX,
+                y: currentBox.y,
+                width: difference,
+                color: color
+            };
+        }
+
+        function updateFallMode(){
+            const currentBox = boxes[current];
+            currentBox.y -= ySpeed;
+
+            const positionPreviousBox = boxes[current - 1].y + BOX_HEIGHT;
+            if(currentBox.y === positionPreviousBox){
+                handleBoxLanding();
+            }
+        }
+
+        function adjustCurrentBox(difference){
+            const currentBox = boxes[current];
+            const previousBox = boxes[current - 1];
+
+            if(currentBox.x > previousBox.x){
+                currentBox.width -= difference;
+            }else{
+                currentBox.width += difference;
+                currentBox.x = previousBox.x;
+            }
+        }
+
+        function gameOver(){
+            mode = MODES.GAMEOVER;
+            context.fillStyle = 'rgba(255,0,0,0.5)';
+            context.fillRect(0,0,canvas.width,canvas.height);
+
+            context.font = 'bold 20px Arial';
+            context.fillStyle = 'white';
+            context.textAlign = 'center';
+            context.fillText(
+                'Game Over',
+                canvas.width / 2,
+                canvas.height / 2
+            );
+        }
+
+        function handleBoxLanding(){
+            const currentBox = boxes[current];
+            const previousBox = boxes[current - 1];
+
+            const difference = currentBox.x - previousBox.x;
+
+            if(Math.abs(difference) >= currentBox.width){
+                gameOver();
+                return;
+            }
+
+            adjustCurrentBox(difference);
+            createNewDebris(difference, currentBox.color);
+
+            xSpeed += xSpeed > 0 ? 0.5 : -0.5;
+            current++;
+            scrollCounter = BOX_HEIGHT;
+            mode = MODES.BOUNCE;
+
+            score.textContent = current - 1;
+
+            createNewBox();
+        }
+
+        function moveAndDetectCollision(){
+            const currentBox = boxes[current];
+            currentBox.x += xSpeed;
+
+            const isMovingRigth = xSpeed > 0;
+            const isMovingLeft = xSpeed < 0;
+
+            const hasHitRigthSide = currentBox.x + currentBox.width > canvas.width;
+
+            const hasLeftSide = currentBox.x < 0;
+
+            if((isMovingRigth && hasHitRigthSide) || (isMovingLeft && hasLeftSide)){
+                xSpeed = -xSpeed;
+            }
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if(event.key === ' ' && mode === MODES.BOUNCE){
+                mode = MODES.FALL;
+            }
+        });
+
+        canvas.onpointerdown = () => {
+            if(mode === MODES.GAMEOVER){
+                restart();
+            }else if(mode === MODES.BOUNCE){
+                mode = MODES.FALL;
+            }
+        };
+
+        restart();
+
+    </script>
+
+</body>
+</html>
